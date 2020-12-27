@@ -1,5 +1,6 @@
 import numpy as np
 import util
+import matplotlib.pyplot as plt
 
 
 def main(train_path, valid_path, save_path):
@@ -16,7 +17,48 @@ def main(train_path, valid_path, save_path):
     # Train a logistic regression classifier
     # Plot decision boundary on top of validation set set
     # Use np.savetxt to save predictions on eval set to save_path
+
+    # Creates logistic regression classifer
+    clf = LogisticRegression()
+
+    # Train the model using training data
+    clf.fit(x_train, y_train)
+
+    # Load validation data set
+    x_val, y_val = util.load_dataset(valid_path, add_intercept=True)
+
+    # Plot validation data set
+    plt.figure()
+    plt.plot(x_val[y_val == 1, -2], x_val[y_val == 1, -1], 'bx', linewidth=2)
+    plt.plot(x_val[y_val == 0, -2], x_val[y_val == 0, -1], 'go', linewidth=2)
+
+    # Plot decision boundary (found by solving for theta^T x = 0)
+    x1 = np.arange(min(x_val[:, -2]), max(x_val[:, -2]), 0.01)
+    x2 = -(clf.theta[0] / clf.theta[2] + clf.theta[1] / clf.theta[2] * x1)
+    plt.plot(x1, x2, c='red', linewidth=2)
+
+    plt.xlim(x_val[:, -2].min()-.1, x_val[:, -2].max()+.1)
+    plt.ylim(x_val[:, -1].min()-.1, x_val[:, -1].max()+.1)
+
+    # Add labels
+    plt.xlabel('x1')
+    plt.ylabel('x2')
+
+    # Save predictions on eval set to save_path
+    np.savetxt(save_path, clf.predict(x_val))
     # *** END CODE HERE ***
+
+
+def sigmoid(x):
+    """Calculates sigmoid function, which is commonly used in logistic regression.
+
+    Args:
+        x: Independent variable that is inputted to sigmoid function
+
+    Returns:
+        1/(1+exp(-x))
+    """
+    return 1/(1+np.exp(-x))
 
 
 class LogisticRegression:
@@ -51,6 +93,50 @@ class LogisticRegression:
             y: Training example labels. Shape (n_examples,).
         """
         # *** START CODE HERE ***
+        if self.theta is None:
+            self.theta = np.zeros(x.shape[1])
+
+        # Keep updating theta until theta converges or the max number of iterations is reached
+        for iteration in range(self.max_iter):
+            loss_gradient = np.empty(self.theta.size)  # Gradient of average log loss function
+            hessian = np.empty((self.theta.size, self.theta.size)) # Hessian matrix of average log loss function
+
+            # Construct gradient vector of the average log loss function with respect to theta
+            for j in range(loss_gradient.size):
+                partial_diff = 0
+                for i in range(y.size):
+                    partial_diff += (y[i] - sigmoid(self.theta.dot(x[i]))) * x[i][j]
+                partial_diff /= -y.size
+                loss_gradient[j] = partial_diff
+
+            # Construct hessian matrix of the average log loss function with respect to theta
+            for j, k in np.ndindex(hessian.shape):
+                partial_secondary_diff = 0
+                for i in range(y.size):
+                    h = sigmoid(self.theta.dot(x[i]))
+                    partial_secondary_diff += h * (1-h) * x[i][j] * x[i][k]
+                partial_secondary_diff /= y.size
+                hessian[j][k] = partial_secondary_diff
+
+            # Store the prior value of theta
+            oldTheta = self.theta.copy()
+
+            # Apply newtons method to update theta
+            try:
+                self.theta -= np.linalg.inv(hessian).dot(loss_gradient)
+            except np.linalg.LinAlgError as error:
+                if 'Singular matrix' in str(error):
+                    print("Error: Cannot invert hessian matrix. Hessian is singular.")
+                else:
+                    print("Error inverting hessian matrix.")
+
+            # Return if the new theta vector is within epsilon of the old theta vector
+            # Signifies that theta has converged
+            if np.linalg.norm(self.theta - oldTheta, 1) < self.eps:
+                return
+
+        print("Warning: Theta failed to converged within the given max number of iterations.")
+        return
         # *** END CODE HERE ***
 
     def predict(self, x):
@@ -63,6 +149,7 @@ class LogisticRegression:
             Outputs of shape (n_examples,).
         """
         # *** START CODE HERE ***
+        return np.array([sigmoid(self.theta.dot(xi)) for xi in x])
         # *** END CODE HERE ***
 
 if __name__ == '__main__':
