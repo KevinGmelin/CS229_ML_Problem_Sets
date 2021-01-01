@@ -1,7 +1,5 @@
 import collections
-
 import numpy as np
-
 import util
 import svm
 
@@ -21,6 +19,9 @@ def get_words(message):
     """
 
     # *** START CODE HERE ***
+    words_unnormalized = message.split(' ')
+    words = [str.lower(word) for word in words_unnormalized]
+    return words
     # *** END CODE HERE ***
 
 
@@ -41,6 +42,22 @@ def create_dictionary(messages):
     """
 
     # *** START CODE HERE ***
+    # Create dictionary where each key is a word found in the list and each value is the number of occurrences
+    # of that word in the messages
+    counter = collections.Counter()
+    for msg in messages:
+        for word in get_words(msg):
+            counter[word] += 1
+
+    # Remove words with less than 5 occurrences
+    # For the remaining words, change their value to be an index starting from 0
+    index = 0
+    dictionary = {}
+    for word, cnt in counter.items():
+        if cnt >= 5:
+            dictionary[word] = index
+            index = index + 1
+    return dictionary
     # *** END CODE HERE ***
 
 
@@ -65,6 +82,14 @@ def transform_text(messages, word_dictionary):
         j-th vocabulary word in the i-th message.
     """
     # *** START CODE HERE ***
+    feature_array = np.zeros((len(messages), len(word_dictionary)))
+    for msg_idx, msg in enumerate(messages):
+        for word in get_words(msg):
+            try:
+                feature_array[msg_idx, word_dictionary[word]] += 1
+            except KeyError:
+                continue
+    return feature_array
     # *** END CODE HERE ***
 
 
@@ -85,6 +110,19 @@ def fit_naive_bayes_model(matrix, labels):
     """
 
     # *** START CODE HERE ***
+    p_spam_prior = np.mean(labels == 1)
+
+    # Probability of a word being in a message given that the message is spam
+    p_word_given_spam = matrix[labels == 1].sum(0)
+    p_word_given_spam += 1  # Add 1 for laplace smoothing
+    p_word_given_spam /= (p_word_given_spam.sum() + len(p_word_given_spam))
+
+    # Probability of a word being in a message given that the message is not spam
+    p_word_given_ham = matrix[labels == 0].sum(0)
+    p_word_given_ham += 1  # Add 1 for laplace smoothing
+    p_word_given_ham /= (p_word_given_ham.sum() + len(p_word_given_ham))
+
+    return p_spam_prior, p_word_given_spam, p_word_given_ham
     # *** END CODE HERE ***
 
 
@@ -98,9 +136,37 @@ def predict_from_naive_bayes_model(model, matrix):
         model: A trained model from fit_naive_bayes_model
         matrix: A numpy array containing word counts
 
-    Returns: A numpy array containg the predictions from the model
+    Returns: A numpy array containing the predictions from the model
     """
     # *** START CODE HERE ***
+    p_spam_prior, p_word_given_spam, p_word_given_ham = model
+
+    p_ham_prior = 1 - p_spam_prior
+    num_messages = matrix.shape[0]
+    dict_size = matrix.shape[1]
+
+    # Loops over and classifies all messages as either spam or ham (not spam)
+    # 1 signifies spam, 0 signifies ham
+    predictions = np.empty(num_messages)
+    for i in range(num_messages):
+        log_p_x_given_spam = 0
+        log_p_x_given_ham = 0
+        for j in range(dict_size):
+            if matrix[i, j] != 0:
+                log_p_x_given_spam += matrix[i, j] * np.log(p_word_given_spam[j])
+                log_p_x_given_ham += matrix[i, j] * np.log(p_word_given_ham[j])
+
+        # Use Bayes Rule to determine probability of spam given the message contents x
+        p_spam_given_x = 1.0 / (1.0 + np.exp(log_p_x_given_ham - log_p_x_given_spam) * p_ham_prior / p_spam_prior)
+
+        # Predict message will be spam if the posterior probability is 50 percent or more
+        if p_spam_given_x >= 0.5:
+            predictions[i] = 1
+        else:
+            predictions[i] = 0
+
+    return predictions
+
     # *** END CODE HERE ***
 
 
@@ -117,6 +183,22 @@ def get_top_five_naive_bayes_words(model, dictionary):
     Returns: A list of the top five most indicative words in sorted order with the most indicative first
     """
     # *** START CODE HERE ***
+    p_spam_prior, p_word_given_spam, p_word_given_ham = model
+
+    # Apply metric to each word's probabilities
+    indicative_metric = np.log(p_word_given_spam / p_word_given_ham)
+
+    # Find the indices of the top 5 words in descending order
+    indices = np.argpartition(indicative_metric, -5)[-5:]  # Gets indices of 5 largest metrics
+    indices[::-1].sort()  # Sort in descending order
+
+    # Finds the 5 words that correspond with the 5 indices
+    indicative_words = []
+    for idx in indices:
+        indicative_words.append(list(dictionary.keys())[list(dictionary.values()).index(idx)])
+
+    return indicative_words
+
     # *** END CODE HERE ***
 
 
@@ -137,6 +219,11 @@ def compute_best_svm_radius(train_matrix, train_labels, val_matrix, val_labels, 
         The best radius which maximizes SVM accuracy.
     """
     # *** START CODE HERE ***
+    accuracies_on_validation = np.empty(len(radius_to_consider))
+    for idx, radius in enumerate(radius_to_consider):
+        predictions = svm.train_and_predict_svm(train_matrix, train_labels, val_matrix, radius)
+        accuracies_on_validation[idx] = np.mean(predictions == val_labels)
+    return radius_to_consider[accuracies_on_validation.argmax()]
     # *** END CODE HERE ***
 
 
