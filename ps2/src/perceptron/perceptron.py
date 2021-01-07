@@ -16,6 +16,9 @@ def initial_state():
     """
 
     # *** START CODE HERE ***
+    betas = []
+    support_vectors = []
+    return betas, support_vectors
     # *** END CODE HERE ***
 
 
@@ -33,6 +36,11 @@ def predict(state, kernel, x_i):
         Returns the prediction (i.e 0 or 1)
     """
     # *** START CODE HERE ***
+    total = 0.0
+    betas, support_vectors = state
+    for beta, sv in zip(betas, support_vectors):
+        total += beta * kernel(sv, x_i)
+    return sign(total)
     # *** END CODE HERE ***
 
 
@@ -47,6 +55,13 @@ def update_state(state, kernel, learning_rate, x_i, y_i):
         y_i: A 0 or 1 indicating the label for a single instance
     """
     # *** START CODE HERE ***
+    betas, support_vectors = state
+    change_in_beta = learning_rate * (y_i - predict(state, kernel, x_i))
+    if change_in_beta == 0:
+        return
+    else:
+        support_vectors.append(x_i)
+        betas.append(change_in_beta)
     # *** END CODE HERE ***
 
 
@@ -105,7 +120,6 @@ def train_perceptron(kernel_name, kernel, learning_rate):
         learning_rate: The learning rate for training.
     """
     train_x, train_y = util.load_csv('train.csv')
-
     state = initial_state()
 
     for x_i, y_i in zip(train_x, train_y):
