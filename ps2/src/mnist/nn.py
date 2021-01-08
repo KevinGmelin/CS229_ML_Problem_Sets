@@ -1,6 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import argparse
+from scipy.special import logsumexp
 
 def softmax(x):
     """
@@ -21,6 +22,7 @@ def softmax(x):
         A 2d numpy float array containing the softmax results of shape batch_size x number_of_classes
     """
     # *** START CODE HERE ***
+    return np.exp(x - logsumexp(x, 1)[:, None])
     # *** END CODE HERE ***
 
 def sigmoid(x):
@@ -34,6 +36,7 @@ def sigmoid(x):
         A numpy float array containing the sigmoid results
     """
     # *** START CODE HERE ***
+    return 1/(1+np.exp(-x))
     # *** END CODE HERE ***
 
 def get_initial_params(input_size, num_hidden, num_output):
@@ -63,6 +66,11 @@ def get_initial_params(input_size, num_hidden, num_output):
     """
 
     # *** START CODE HERE ***
+    W1 = np.random.normal(0, 1, (input_size, num_hidden))
+    b1 = np.zeros(num_hidden)
+    W2 = np.random.normal(0, 1, (num_hidden, num_output))
+    b2 = np.zeros(num_output)
+    return {'W1': W1, 'b1': b1, 'W2': W2, 'b2': b2}
     # *** END CODE HERE ***
 
 def forward_prop(data, labels, params):
@@ -84,6 +92,10 @@ def forward_prop(data, labels, params):
             3. The average loss for these data elements
     """
     # *** START CODE HERE ***
+    activations = sigmoid(np.dot(data, params['W1']) + params['b1'])  # Shape: batch_size x num_hidden
+    outputs = softmax(np.dot(activations, params['W2']) + params['b2'])  # Shape: batch_size x num_output
+    average_loss = - np.log(outputs[np.arange(labels.shape[0]), np.argmax(labels, axis=1)]).sum()/labels.shape[0]
+    return activations, outputs, average_loss
     # *** END CODE HERE ***
 
 def backward_prop(data, labels, params, forward_prop_func):
@@ -107,6 +119,22 @@ def backward_prop(data, labels, params, forward_prop_func):
             W1, W2, b1, and b2
     """
     # *** START CODE HERE ***
+    # Activations Shape: batch_size x num_hidden
+    # Outputs Shape: batch_size x num_output
+    # Average loss Shape: batch_size
+    # W1 size input_size x num_hidden
+    # b1 size num_hidden
+    # W2 size num_hidden x num_output
+    # b2 size num_output
+    activations, outputs, average_loss = forward_prop_func(data, labels, params)
+    delta2 = outputs - labels  # shape: batch_size x num_output
+    delta1 = np.dot(delta2, params['W2'].T) * activations * (1-activations)  # shape: batch_size x num_hidden
+    batch_size = labels.shape[0]
+    grad_W1 = np.dot(data.T, delta1)/batch_size
+    grad_W2 = np.dot(activations.T, delta2)/batch_size
+    grad_b1 = delta1.sum(0)/batch_size
+    grad_b2 = delta2.sum(0)/batch_size
+    return {'W1': grad_W1, 'W2': grad_W2, 'b1': grad_b1, 'b2': grad_b2}
     # *** END CODE HERE ***
 
 
@@ -132,6 +160,22 @@ def backward_prop_regularized(data, labels, params, forward_prop_func, reg):
             W1, W2, b1, and b2
     """
     # *** START CODE HERE ***
+    # Activations Shape: batch_size x num_hidden
+    # Outputs Shape: batch_size x num_output
+    # Average loss Shape: batch_size
+    # W1 size input_size x num_hidden
+    # b1 size num_hidden
+    # W2 size num_hidden x num_output
+    # b2 size num_output
+    activations, outputs, average_loss = forward_prop_func(data, labels, params)
+    delta2 = outputs - labels  # shape: batch_size x num_output
+    delta1 = np.dot(delta2, params['W2'].T) * activations * (1-activations)  # shape: batch_size x num_hidden
+    batch_size = labels.shape[0]
+    grad_W1 = np.dot(data.T, delta1)/batch_size + reg * params['W1']
+    grad_W2 = np.dot(activations.T, delta2)/batch_size + reg * params['W2']
+    grad_b1 = delta1.sum(0)/batch_size
+    grad_b2 = delta2.sum(0)/batch_size
+    return {'W1': grad_W1, 'W2': grad_W2, 'b1': grad_b1, 'b2': grad_b2}
     # *** END CODE HERE ***
 
 def gradient_descent_epoch(train_data, train_labels, learning_rate, batch_size, params, forward_prop_func, backward_prop_func):
@@ -154,6 +198,17 @@ def gradient_descent_epoch(train_data, train_labels, learning_rate, batch_size, 
     """
 
     # *** START CODE HERE ***
+    num_training_examples = train_labels.shape[0]
+    for i in range(int(num_training_examples/batch_size)):
+        gradients = backward_prop_func(
+            train_data[i * batch_size: (i+1) * batch_size],
+            train_labels[i * batch_size: (i+1) * batch_size],
+            params,
+            forward_prop_func)
+        params['W1'] -= learning_rate * gradients['W1']
+        params['W2'] -= learning_rate * gradients['W2']
+        params['b1'] -= learning_rate * gradients['b1']
+        params['b2'] -= learning_rate * gradients['b2']
     # *** END CODE HERE ***
 
     # This function does not return anything
@@ -220,7 +275,7 @@ def run_train_test(name, all_data, all_labels, backward_prop_func, num_epochs, p
 
         ax1.plot(t, cost_train,'r', label='train')
         ax1.plot(t, cost_dev, 'b', label='dev')
-        ax1.set_xlabel('epochs')
+        # ax1.set_xlabel('epochs')
         ax1.set_ylabel('loss')
         if name == 'baseline':
             ax1.set_title('Without Regularization')
@@ -282,7 +337,7 @@ def main(plot=True):
     
     baseline_acc = run_train_test('baseline', all_data, all_labels, backward_prop, args.num_epochs, plot)
     reg_acc = run_train_test('regularized', all_data, all_labels, 
-        lambda a, b, c, d: backward_prop_regularized(a, b, c, d, reg=0.0001),
+        lambda a, b, c, d: backward_prop_regularized(a, b, c, d, reg=0.0002),
         args.num_epochs, plot)
         
     return baseline_acc, reg_acc
